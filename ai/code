@@ -1,0 +1,295 @@
+"""
+Monopoly as a Markov chain, built from the rules in the Hasbro "Speed Die" rule sheet.
+
+Two models are built:
+
+  classic : 43 states  = 40 squares + 3 jail states (In Jail, turn 1/2/3)
+  speed   : 86 states  = the 43 above, twice: once for "has not yet passed GO"
+                         (Speed Die not unlocked yet) and once for "has passed GO"
+                         (Speed Die in use for the rest of the game).
+
+One step of the chain is ONE WHOLE TURN (the chain of doubles is folded inside the step).
+Convention (matches the project so far): P[to, from], so every COLUMN sums to 1 and
+the distribution evolves as  x_{t+1} = P @ x_t.
+
+Rules taken from the PDF
+  * 2 white dice; doubles -> roll again; 3rd double in a row -> straight to jail, no move.
+  * Go To Jail square / Go To Jail card / 3 doubles -> jail, turn ends at once.
+  * In jail: doubles on any of the next 3 turns gets you out and you move that roll,
+    WITHOUT another turn; if no doubles by the 3rd turn you pay $50 and move that roll.
+    You may also pay $50 before rolling on the 1st/2nd turn (parameter p_pay).
+  * Speed Die (used only after the first time you land on / pass GO, never in jail):
+      1,2,3 -> added to the white dice
+      Bus   -> move die A, die B, or A+B (policy parameter)
+      Mr. Monopoly -> move A+B and resolve the square, then advance to the next property
+                      (bank phase: next one the bank still holds; later: next one that
+                      costs you rent).  Not drawable from a pure position chain, so it
+                      is modelled with the parameter u (see below).
+      Triple (all 3 dice equal; the Speed Die counts only for this) -> move anywhere.
+      Doubles are judged on the white dice only.  Jailed during the move -> no Speed Die.
+  * Chance / Community Chest: the PDF does not list the cards, so the standard US deck
+    is used (all movement cards, drawn i.i.d. - the usual Markov simplification).
+
+Parameters / modelling choices (the things a pure Markov chain cannot know)
+  u        probability that a given property square "qualifies" as Mr. Monopoly's target
+           (scalar, or a length-40 array).  The target is the first qualifying property
+           ahead.  u=1 -> always the very next property square.
+           Bank phase:  u ~ fraction of properties the bank still holds.
+           Rent phase:  u ~ fraction owned (unmortgaged) by opponents.
+  p_pay    chance of paying the $50 fine before rolling on jail turns 1 and 2 (default 0).
+  bus      'uniform' (default: the three options are equally likely) or 'sum'.
+  triple   dict {square: prob} for where a triple goes (default: uniform over the 28
+           buyable squares).
+  Get Out of Jail Free card, houses/hotels, cash, auctions and bankruptcy do not change
+  where a token goes, so they are not part of the chain.
+"""
+from collections import defaultdict
+import numpy as np
+
+JAIL = 10
+GTJ = 30
+CHANCE = {7, 22, 36}
+CHEST = {2, 17, 33}
+RAILS = (5, 15, 25, 35)
+UTILS = (12, 28)
+PROPS = tuple(sorted([1, 3, 5, 6, 8, 9, 11, 12, 13, 14, 15, 16, 18, 19, 21, 23, 24,
+                      25, 26, 27, 28, 29, 31, 32, 34, 35, 37, 39]))
+J1 = 40                      # base index of "In Jail, turn 1"; J2 = 41, J3 = 42
+NB = 43
+SPEED_FACES = (1, 2, 3, 'B', 'M', 'M')    # 1,2,3, one Bus, two Mr. Monopoly
+
+NAMES = ["GO", "Mediterranean Ave", "Community Chest", "Baltic Ave", "Income Tax",
+         "Reading RR", "Oriental Ave", "Chance", "Vermont Ave", "Connecticut Ave",
+         "Just Visiting", "St. Charles Place", "Electric Company", "States Ave",
+         "Virginia Ave", "Pennsylvania RR", "St. James Place", "Community Chest",
+         "Tennessee Ave", "New York Ave", "Free Parking", "Kentucky Ave", "Chance",
+         "Indiana Ave", "Illinois Ave", "B&O RR", "Atlantic Ave", "Ventnor Ave",
+         "Water Works", "Marvin Gardens", "Go To Jail", "Pacific Ave",
+         "North Carolina Ave", "Community Chest", "Pennsylvania Ave", "Short Line RR",
+         "Chance", "Park Place", "Luxury Tax", "Boardwalk",
+         "In Jail (turn 1)", "In Jail (turn 2)", "In Jail (turn 3)"]
+
+# Standard US decks.  ('to', sq) = advance to square, passing GO pays $200.
+CHANCE_CARDS = [('to', 0), ('to', 24), ('to', 11), ('util',), ('rail',), ('rail',),
+                ('stay',), ('stay',), ('back3',), ('jail',), ('stay',), ('stay',),
+                ('to', 5), ('to', 39), ('stay',), ('stay',)]
+CHEST_CARDS = [('to', 0), ('jail',)] + [('stay',)] * 14
+
+
+def next_in(pos, group):
+    for s in sorted(group):
+        if s > pos:
+            return s
+    return min(group)
+
+
+def resolve(pos, flag):
+    """Effects of arriving on `pos`.
+    -> list of (prob, final_pos, flag, sent_to_jail, extra_arrival_squares)"""
+    if pos == GTJ:
+        return [(1.0, JAIL, flag, True, (40,))]
+    if pos in CHANCE:
+        deck = CHANCE_CARDS
+    elif pos in CHEST:
+        deck = CHEST_CARDS
+    else:
+        return [(1.0, pos, flag, False, ())]
+    out = []
+    p = 1.0 / len(deck)
+    for card in deck:
+        kind = card[0]
+        if kind == 'stay':
+            out.append((p, pos, flag, False, ()))
+            continue
+        if kind == 'jail':
+            out.append((p, JAIL, flag, True, (40,)))
+            continue
+        if kind == 'to':
+            dest = card[1]
+        elif kind == 'util':
+            dest = next_in(pos, UTILS)
+        elif kind == 'rail':
+            dest = next_in(pos, RAILS)
+        else:  # back3
+            dest = pos - 3
+        passed = kind != 'back3' and (dest < pos or dest == 0)
+        f2 = 1 if passed else flag
+        for q, p2, f3, j, ex in resolve(dest, f2):
+            out.append((p * q, p2, f3, j, (dest,) + ex))
+    return out
+
+
+def land(dest, flag, passed):
+    """Token arrives on `dest` (passed = it crossed/landed on GO on the way)."""
+    f1 = 1 if passed else flag
+    return [(q, p2, f2, j, (dest,) + ex) for q, p2, f2, j, ex in resolve(dest, f1)]
+
+
+class Model:
+    def __init__(self, speed=True, u=0.5, p_pay=0.0, bus='uniform', triple=None):
+        self.speed = speed
+        if np.isscalar(u):
+            arr = np.zeros(40)
+            arr[list(PROPS)] = u
+            u = arr
+        self.u = np.asarray(u, dtype=float)
+        self.p_pay = p_pay
+        self.bus = bus
+        if triple is None:
+            triple = {s: 1.0 / len(PROPS) for s in PROPS}
+        self.triple = triple
+        self._kernels = {}
+
+    # ---- helpers -------------------------------------------------------
+    def bus_options(self, a, b):
+        if self.bus == 'sum':
+            return {a + b: 1.0}
+        opts = sorted({a, b, a + b})
+        return {s: 1.0 / len(opts) for s in opts}
+
+    def mono_targets(self, pos):
+        """First qualifying property ahead of pos (cycling round the board)."""
+        surv, res = 1.0, {}
+        for k in range(1, 41):
+            s = (pos + k) % 40
+            if self.u[s] > 0:
+                res[s] = surv * self.u[s]
+                surv *= 1 - self.u[s]
+        tot = sum(res.values())
+        if tot == 0:
+            return {pos: 1.0}
+        return {s: v / tot for s, v in res.items()}
+
+    # ---- one roll, from a given (pos, flag) -----------------------------
+    def kernel(self, pos, flag, last):
+        """Outcome of ONE roll.  last=True means this is the 3rd roll of a turn
+        (so doubles -> jail).  Returns (end, cont, arr) per unit probability mass."""
+        key = (pos, flag, last)
+        if key in self._kernels:
+            return self._kernels[key]
+        end, cont, arr = defaultdict(float), defaultdict(float), np.zeros(41)
+        use_sp = self.speed and flag == 1
+        if use_sp:
+            rolls = [(a, b, f) for a in range(1, 7) for b in range(1, 7) for f in SPEED_FACES]
+        else:
+            rolls = [(a, b, None) for a in range(1, 7) for b in range(1, 7)]
+        w = 1.0 / len(rolls)
+        for a, b, f in rolls:
+            dbl = a == b
+            if dbl and last:
+                end[(J1, flag)] += w
+                arr[40] += w
+                continue
+            moves = []
+            if use_sp and dbl and isinstance(f, int) and f == a:       # triple
+                moves = [(q, s, False) for s, q in self.triple.items()]
+            elif f == 'B':
+                moves = [(q, (pos + s) % 40, pos + s >= 40)
+                         for s, q in self.bus_options(a, b).items()]
+            else:
+                s = a + b + (f if isinstance(f, int) else 0)
+                moves = [(1.0, (pos + s) % 40, pos + s >= 40)]
+            for q, dest, passed in moves:
+                for r, p2, f2, jailed, ex in land(dest, flag, passed):
+                    pp = w * q * r
+                    for s_ in ex:
+                        arr[s_] += pp
+                    if jailed:                       # turn over, no Speed Die
+                        end[(J1, f2)] += pp
+                        continue
+                    outs = [(p2, pp)]
+                    if use_sp and f == 'M':          # Mr. Monopoly's extra move
+                        outs = []
+                        for t, tq in self.mono_targets(p2).items():
+                            arr[t] += pp * tq
+                            outs.append((t, pp * tq))
+                    for p3, m3 in outs:
+                        if dbl:
+                            cont[(p3, f2)] += m3
+                        else:
+                            end[(p3, f2)] += m3
+        self._kernels[key] = (end, cont, arr)
+        return self._kernels[key]
+
+    # ---- whole turns ----------------------------------------------------
+    def normal_turn(self, pos, flag):
+        end, arr = defaultdict(float), np.zeros(41)
+        cur = {(pos, flag): 1.0}
+        for d in range(3):
+            nxt = defaultdict(float)
+            for (ps, fl), m in cur.items():
+                e, c, a = self.kernel(ps, fl, d == 2)
+                for k, v in e.items():
+                    end[k] += m * v
+                for k, v in c.items():
+                    nxt[k] += m * v
+                arr += m * a
+            cur = nxt
+        return end, arr
+
+    def jail_turn(self, k, flag):
+        end, arr = defaultdict(float), np.zeros(41)
+        pay = self.p_pay if k < 3 else 0.0
+        if pay > 0:                                   # pay $50, then a normal turn
+            e, a = self.normal_turn(JAIL, flag)
+            for key, v in e.items():
+                end[key] += pay * v
+            arr += pay * a
+        rest = 1.0 - pay
+        for a in range(1, 7):
+            for b in range(1, 7):
+                p = rest / 36
+                if a != b and k < 3:
+                    end[(J1 + k, flag)] += p          # still in jail (turn k+1)
+                    continue
+                # doubles (free) or 3rd failed roll (pay $50): move white dice, turn ends
+                for r, p2, f2, jailed, ex in land(JAIL + a + b, flag, False):
+                    pp = p * r
+                    for s in ex:
+                        arr[s] += pp
+                    end[(J1 if jailed else p2, f2)] += pp
+        return end, arr
+
+    # ---- assemble -------------------------------------------------------
+    def build(self):
+        nf = 2 if self.speed else 1
+        n = NB * nf
+        P = np.zeros((n, n))
+        L = np.zeros((41, n))
+        for f in range(nf):
+            for b in range(NB):
+                end, arr = self.normal_turn(b, f) if b < 40 else self.jail_turn(b - 39, f)
+                col = f * NB + b
+                for (idx, fl), pr in end.items():
+                    P[(fl if self.speed else 0) * NB + idx, col] += pr
+                L[:, col] = arr
+        return P, L
+
+    def labels(self):
+        if not self.speed:
+            return list(NAMES)
+        return [("[no speed die] " if f == 0 else "") + nm for f in range(2) for nm in NAMES]
+
+
+def stationary(P):
+    n = P.shape[0]
+    A = np.vstack([P - np.eye(n), np.ones(n)])
+    b = np.zeros(n + 1)
+    b[-1] = 1
+    pi = np.linalg.lstsq(A, b, rcond=None)[0]
+    pi[np.abs(pi) < 1e-15] = 0
+    return pi / pi.sum()
+
+
+def fold(pi, speed):
+    """Collapse the flag dimension -> distribution over the 43 base states."""
+    return pi[:NB] + pi[NB:] if speed else pi
+
+
+if __name__ == "__main__":
+    for speed in (False, True):
+        P, L = Model(speed=speed).build()
+        print("speed" if speed else "classic", P.shape,
+              "max |col sum - 1| =", np.abs(P.sum(0) - 1).max())
+
+    print(L[2,0])

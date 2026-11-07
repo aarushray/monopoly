@@ -4,7 +4,7 @@ import numpy as np
 
 
 rng = np.random.default_rng()
-num_of_games = 100000
+num_of_games = 1000
 
 # jail = np.zeros(cols)
 
@@ -50,10 +50,29 @@ def markov_freq(N):
     return total / N
 
 for i in checkpoints:
-    print(i, np.max(np.abs(results[i] - markov_freq(i))))
+    # print(i, np.max(np.abs(results[i] - markov_freq(i))))
+    i = i
+
+x = markov_freq(55)
+
+print("Orange:")
+print("Turns to recoup:", 680/(14*x[16] + 14*x[18] + 16*x[19]+ 200))
+print("Probability:", x[16] + x[18] + x[19])
+print("Rent:", 44)
+print("EV:", 44*(x[16] + x[18] + x[19]), "\n")
 
 
+print("Red:")
+print("Turns to recoup:", 680/(18*x[21] + 18*x[23] + 20*x[24]+ 200))
+print("Probability:", x[21] + x[23] + x[24])
+print("Rent:", 18+18+20)
+print("EV:", 56*(x[21] + x[23] + x[24]), "\n")
 
+print("Purple:")
+print("Turns to recoup:", 750/(35*x[37] + 50*x[39] + 200))
+print("Probability:", x[37] + x[39])
+print("Rent:", 85)
+print("EV:", 85*(x[37] + x[39]))
 
 
 

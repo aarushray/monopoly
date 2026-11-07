@@ -1,125 +1,38 @@
-from monopoly import A, cols
 
-import numpy as np
-
-
-rng = np.random.default_rng()
-num_of_games = 1000
-
-# jail = np.zeros(cols)
-
-pos = np.zeros(num_of_games, dtype = int)
-jail = np.zeros(num_of_games, dtype = int)
-counts = np.zeros((num_of_games, cols),dtype=int)
-
-checkpoints = [25, 50, 100, 200, 1000]
-results = {}
+# i = 5
+# dice = [1.0/36.0, 1.0/18.0, 1.0/12.0, 1.0/9.0, 5.0/36.0, 1.0/6.0, 5.0/36.0, 1.0/9.0, 1.0/12.0, 1.0/18.0, 1.0/36.0]
+# dice *= 36
 
 
-for i in range(1, 1001):
+# starting_idx = (i+2)%40
+# counter = 0
 
-    inc = rng.integers(1,7,num_of_games) + rng.integers(1, 7, num_of_games)
+# starting_idx = (i+2)%40
+# for counter in range(0, 11):
+#     if starting_idx == 30:
+#         if counter % 2 == 0:
+#             print(40, 1)
+#     else:
+#         if counter % 2 == 0:
+#             print(starting_idx, 1)
+#     starting_idx += 1
+#     if starting_idx > 39:
+#         starting_idx %= 40
 
-    in_jail = (jail > 0)
-    released = (in_jail) & (jail == 3)
-
-    pos = np.where(in_jail, pos, (pos+inc)%40) ### free players move
-    pos = np.where(released, 10, pos) ### get out of jail players released
-
-    send_to_jail = (~in_jail) & (pos == 30)
-    in_jail[send_to_jail] = True
-
-    jail = np.where(in_jail, np.where(jail == 3, 0, jail + 1), 0)
-
-    pos = np.where(jail > 0, 39+jail, pos)
-
-    counts[np.arange(num_of_games), pos] += 1
-
-    if i in checkpoints:
-        results[i] = counts.mean(axis = 0)/i
-
-
-def markov_freq(N):
-    x = np.zeros(cols)
-    x[0] = 1
-    total = np.zeros(cols)
-    for i in range(N):
-        x = A @ x
-        total += x
-    return total / N
-
-for i in checkpoints:
-    print(i, np.max(np.abs(results[i] - markov_freq(i))))
-
-
-
-
-
-
-
-
-
-### Add the case where 3 double rolls -> go to jail
-### Roll a double to get out of jail
-
-### The combination with properties
-
-### First POV: It is a known result that the best strategy in monopoly is to form a complete set of one colour first
-### Find the set with the highest combined probability
-### Tag the word list with the colours in front of the property name
-### Let red be R, green be G, yellow be Y, blue be B, purple be P
-
-### Second POV: I can make a table with the discrete probabilities of landing at each square
-### List how owning all of one colour would compare first
-### Caveat: Have to own all of one colour before building houses
-### Investigate when does it become worth it to buy the more expensive properties like G and P
-### By factoring in developmental costs
-
-
-
-
-
-
-
-
-# from monopoly import A
-
-# import numpy as np
-
-# rng = np.random.default_rng(0)
-# G = 10000
-# checkpoints = [25, 50, 100, 200, 1000]
-
-# pos = np.zeros(G, dtype=int)     # board square 0-39
-# jail = np.zeros(G, dtype=int)    # 0 = not in jail, 1/2/3 = Jail 1/2/3
-# counts = np.zeros((G, 43))
-# results = {}
-
-# for t in range(1, 1001):
-#     roll = rng.integers(1, 7, G) + rng.integers(1, 7, G)   # two dice
-#     in_jail = (jail > 0)
-#     released = (in_jail & (jail == 3))
-
-#     pos = np.where(in_jail, pos, (pos + roll) % 40)        # only free players move
-#     pos = np.where(released, 10, pos)                      # leaving jail -> square 10
-#     jail = np.where(in_jail, np.where(jail == 3, 0, jail + 1), 0)
-
-#     sent = (~in_jail) & (pos == 30)                        # landed on Go to Jail
-#     jail[sent] = 1
-
-#     idx = np.where(jail > 0, 39 + jail, pos)               # jail 1/2/3 -> indices 40/41/42
-#     counts[np.arange(G), idx] += 1
-
-#     if t in checkpoints:
-#         results[t] = counts.mean(axis=0) / t
-
-# def exact_freq(N):
-#     x = np.zeros(43); x[0] = 1
-#     total = np.zeros(43)
-#     for i in range(N):
-#         x = A @ x
-#         total += x
-#     return total / N
-
-# for N in checkpoints:
-#     print(N, np.max(np.abs(results[N] - exact_freq(N))))
+# for i in range(cols):
+# ### Handles case 1: players jail transition states
+# ### The rules state that when you throw doubles to
+# ### get out of jail, you advance by that number of
+# ### squares, but you do not get another roll
+# ### So this makes sense
+#     if i == 30:
+#         M[40][i] = 5.0/6.0
+#     elif i == 40 or i == 41:
+#         for j in range(12, 23, 2):
+#             M[j][i] = 1.0/36.0
+#         M[i+1][i] = 5.0/6.0
+#     elif i == 42:
+#         for j in range(12, 23):
+#             M[j][i] = dice[j-12]
+#     else:
+# ### Handles case 2: the normal case of rolling the dice
