@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 
 import pandas as pd
 
-
+### This file is used to construct the markox matrix A from its parts
+### and is used to find the eigenvalues and eigenvectors and the steady
+### state probability distribution vector pi.
 
 dice = [1.0/36.0, 1.0/18.0, 1.0/12.0, 1.0/9.0, 5.0/36.0, 1.0/6.0, 5.0/36.0, 1.0/9.0, 1.0/12.0, 1.0/18.0, 1.0/36.0]
 chance = [7, 22, 36]
@@ -21,6 +23,11 @@ rows = 43
 M = np.zeros((rows, cols), dtype=float)
 
 D = np.zeros((rows, cols), dtype=float)
+
+J = np.zeros((rows, cols), dtype=float)
+
+F = np.zeros((rows, cols), dtype=float)
+F[40,: ] = 1/216
 
 R = np.eye(cols)
 
@@ -40,8 +47,8 @@ def apply_cards(M):
     for i in chance:
 
     ### 6/16 chance of staying. 10/16 of leaving
-    ### 6 tiles to go to. 1 jail, back 3 spaces
-    ### 2 nearest stations, 2 nearest utility
+    ### 5 tiles to go to. 1 jail, back 3 spaces
+    ### 2 nearest stations, 1 nearest utility
 
         chancerow = M[i,:].copy()
         for j in dest:
@@ -97,7 +104,7 @@ for i in range(cols):
 ### So this makes sense
     if i == 30:
         M[40, i] = 5.0/6.0
-        D[40, i] = 1/0/6.0
+        D[40, i] = 1.0/6.0
     elif i == 40 or i == 41:
         for j in range(12, 23, 2):
             M[j, i] = 1.0/36.0
@@ -109,7 +116,7 @@ for i in range(cols):
         for j in range(12, 23):
             M[j, i] = dice[j-12]
     else:
-### Handles case 2: the normal case of rolling the dice
+    ### Handles case 2: the normal case of rolling the dice
         starting_idx = (i+2)%40
         for counter in range(0, 11):
             if starting_idx == 30:
@@ -128,79 +135,57 @@ for i in range(cols):
 
 M = apply_cards(M)
 D = apply_cards(D)
+
+
+### Transferring the jail transition states to a Jail matrix.
+### The jail matrix handles the rolling doubles to get out of jail and advancing
+### mechanism. The jail matrix also handles transitioning from jail state 1 to 2 to 3.
+
+J[:, 40:] = M[:, 40:]
+M[:, 40:] = 0
+D[:, 40:] = 0
+
 M[40, 40] = 5/6
 D[40, 40] = 1/6
 
-for j in range(cols):
-    s = 0;
-    for i in M[:,j]:
-        s+= i
-    if abs(s-5/6) >= 1e-6:
-        print(s)
 
-print("above cols dont sum to")
+A = M + M @ D + M @ D @ D + F
 
+A[:, 40:] = J[:, 40:]
 
-
-
+# for j in range(cols):
+#     s=0
+#     for i in A[:,j]:
+#         s+=i
+#     print(s)
 
 
-# for i in chance:
-#     R[:,i] = 0
-#     R[i, i] += 6/16
+eigenvalues, eigenvectors = np.linalg.eig(A)
 
-#     R[i-3, i] += 1/16
+order = np.argsort(-np.abs(eigenvalues))
 
-#     for j in dest:
-#         R[j, i] += 1/16
-
-#     found = False    
-#     for j in stations:
-#         if j > i:
-#             R[j, i] += 1/8
-#             found = True
-#             break
-
-#     if found == False:
-#         R[5, i] += 1/8
-
-#     found = False
-    
-#     for j in utility:
-#         if j > i:
-#             R[j, i] += 1/16
-#             found += True
-#             break
-
-#     if found == False:
-#         R[12, i] += 1/16
-
-#     if (i == 36):
-#         R[:, i] += 1/16 * R[:, i-3]
-#         R[i-3, i] =  1/16 * 14/16
+eigenvalues = eigenvalues[order]
+eigenvectors = eigenvectors[:,order]
 
 
-# A = R @ M
+x = np.zeros(cols)
+x[0] = 1
 
-# eigenvalues, eigenvectors = np.linalg.eig(A)
+c = np.linalg.solve(eigenvectors, x)
 
-# order = np.argsort(-np.abs(eigenvalues))
-# eigenvalues = eigenvalues[order]
+pi = abs(c[0] * eigenvectors[:,0])
 
-# eigenvectors = eigenvectors[:, order]
+order = np.argsort(-pi)
 
-# ### starting state u0 = [1, 0, 0, ... 0] because everyone always starts at the Go square
+with open(file = "tile names.txt", mode = "r") as f:
+    square_names = [line.strip() for line in f if line.strip()]
 
-# x = np.zeros(43)
-# x[0] = 1
+# for idx in order[:20]:
+#     print(f"{square_names[idx]:<28} {pi[idx]:.5f}")
 
-# c = np.linalg.solve(eigenvectors, x)
+# keep = [i for i in range(43) if i != 30]
+# A_sub = A[np.ix_(keep, keep)]
 
-# for i in range(1000):
-#     x = A @ x
-
-# # print(np.allclose(x, c[0]*eigenvectors[:,0]))
-
-
-# pi = np.real(c[0]*eigenvectors[:,0])
-
+# print(np.allclose(A_sub.sum(axis=0), 1))     # columns still sum to 1
+# P = np.linalg.matrix_power(A_sub, 200)
+# print((P > 0).all())          

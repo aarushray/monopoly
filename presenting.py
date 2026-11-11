@@ -1,16 +1,20 @@
-from monopoly import pi
+# from monopoly import pi
 
-import numpy as np
+# import numpy as np
 
-import seaborn as sns
-import matplotlib.pyplot as plt
+# import seaborn as sns
+# import matplotlib.pyplot as plt
 
-import pandas as pd
+# import pandas as pd
 
-with open(file = "tile names.txt", mode = "r") as f:
-    square_names = [line.strip() for line in f if line.strip()]
+# with open(file = "tile names.txt", mode = "r") as f:
+#     square_names = [line.strip() for line in f if line.strip()]
 
+# order = np.argsort(pi)
 
-top = np.argsort(-pi)[:20]
-for idx in top:
-    print(f"{square_names[idx]:20s} {pi[idx]:.4f}")
+# ranks = ["null" for i in range(43)]
+
+# for i in range(43):
+#     ranks[order[i]] = square_names[i]
+
+# print(ranks)

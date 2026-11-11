@@ -1,38 +1,42 @@
+import pandas as pd
+import numpy as np
 
-# i = 5
-# dice = [1.0/36.0, 1.0/18.0, 1.0/12.0, 1.0/9.0, 5.0/36.0, 1.0/6.0, 5.0/36.0, 1.0/9.0, 1.0/12.0, 1.0/18.0, 1.0/36.0]
-# dice *= 36
+from landing_matrix import v
+from monopoly import square_names
 
+_RAW = {
+    1:  ("Brown",      60,  50, (2, 10, 30, 90, 160, 250)),
+    3:  ("Brown",      60,  50, (4, 20, 60, 180, 320, 450)),
+    6:  ("Light blue", 100, 50, (6, 30, 90, 270, 400, 550)),
+    8:  ("Light blue", 100, 50, (6, 30, 90, 270, 400, 550)),
+    9:  ("Light blue", 120, 50, (8, 40, 100, 300, 450, 600)),
+    11: ("Pink",       140, 100, (10, 50, 150, 450, 625, 750)),
+    13: ("Pink",       140, 100, (10, 50, 150, 450, 625, 750)),
+    14: ("Pink",       160, 100, (12, 60, 180, 500, 700, 900)),
+    16: ("Orange",     180, 100, (14, 70, 200, 550, 750, 950)),
+    18: ("Orange",     180, 100, (14, 70, 200, 550, 750, 950)),
+    19: ("Orange",     200, 100, (16, 80, 220, 600, 800, 1000)),
+    21: ("Red",        220, 150, (18, 90, 250, 700, 875, 1050)),
+    23: ("Red",        220, 150, (18, 90, 250, 700, 875, 1050)),
+    24: ("Red",        240, 150, (20, 100, 300, 750, 925, 1100)),
+    26: ("Yellow",     260, 150, (22, 110, 330, 800, 975, 1150)),
+    27: ("Yellow",     260, 150, (22, 110, 330, 800, 975, 1150)),
+    29: ("Yellow",     280, 150, (24, 120, 360, 850, 1025, 1200)),
+    31: ("Green",      300, 200, (26, 130, 390, 900, 1100, 1275)),
+    32: ("Green",      300, 200, (26, 130, 390, 900, 1100, 1275)),
+    34: ("Green",      320, 200, (28, 150, 450, 1000, 1200, 1400)),
+    37: ("Dark blue",  350, 200, (35, 175, 500, 1100, 1300, 1500)),
+    39: ("Dark blue",  400, 200, (50, 200, 600, 1400, 1700, 2000)),
+}
 
-# starting_idx = (i+2)%40
-# counter = 0
+df = pd.DataFrame.from_dict(_RAW, orient="index", columns =["Colour", "Property Cost",
+                                                  "House Cost", "Rent"])
 
-# starting_idx = (i+2)%40
-# for counter in range(0, 11):
-#     if starting_idx == 30:
-#         if counter % 2 == 0:
-#             print(40, 1)
-#     else:
-#         if counter % 2 == 0:
-#             print(starting_idx, 1)
-#     starting_idx += 1
-#     if starting_idx > 39:
-#         starting_idx %= 40
+df["Probs"] = v[df.index]
 
-# for i in range(cols):
-# ### Handles case 1: players jail transition states
-# ### The rules state that when you throw doubles to
-# ### get out of jail, you advance by that number of
-# ### squares, but you do not get another roll
-# ### So this makes sense
-#     if i == 30:
-#         M[40][i] = 5.0/6.0
-#     elif i == 40 or i == 41:
-#         for j in range(12, 23, 2):
-#             M[j][i] = 1.0/36.0
-#         M[i+1][i] = 5.0/6.0
-#     elif i == 42:
-#         for j in range(12, 23):
-#             M[j][i] = dice[j-12]
-#     else:
-# ### Handles case 2: the normal case of rolling the dice
+out = df.copy()
+
+probs = out.groupby("Colour")["Probs"].idxmax()
+
+for idx in probs:
+    print(f"{square_names[idx]:<28}")
