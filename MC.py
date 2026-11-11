@@ -15,6 +15,50 @@ counts = np.zeros((num_of_games, cols),dtype=int)
 checkpoints = [25, 50, 100, 200, 1000]
 results = {}
 
+
+chance = [7, 22, 36]
+community_chest = [2, 17, 33]
+stations = np.array([5, 15, 25, 35])
+utilities = np.array([12, 28])
+
+def apply_cards(pos, moved):
+    ### draws a card for every player who moved and is now on a chance or community chest square
+    pos = pos.copy()
+ 
+    ### Chance: 16 cards. 6 stay, 1 jail, 9 move (nearest station is two cards)
+    on_chance = moved & np.isin(pos, chance)
+    old = pos[on_chance]
+    card = rng.integers(0, 16, old.size)
+ 
+    new = old.copy()                                    ### cards 0-5: stay put
+    new[card == 6] = 40                                 ### go to jail
+    new[card == 7] = 0                                  ### advance to Go
+    new[card == 8] = 24                                 ### Trafalgar Square
+    new[card == 9] = 39                                 ### Mayfair
+    new[card == 10] = 11                                ### Pall Mall
+    new[card == 11] = 5                                 ### Kings Cross
+    near_station = (card == 12) | (card == 13)          ### nearest station (2 cards), wraps round past Go
+    new[near_station] = stations[np.searchsorted(stations, old[near_station], side = "right") % 4]
+    near_utility = card == 14                           ### nearest utility, wraps round past Go
+    new[near_utility] = utilities[np.searchsorted(utilities, old[near_utility], side = "right") % 2]
+    new[card == 15] = old[card == 15] - 3               ### go back 3 spaces
+    pos[on_chance] = new                                ### updates chance so cc can take care of square 33
+
+    ### square 36 chance is special because if a player draws move back by 3 steps,
+    ### they end up on square 33 which is a community chest square
+ 
+    ### Community Chest: 14/16 stay, 1/16 Go, 1/16 jail
+    ### done after chance so that going back 3 from square 36 (onto 33) also draws a community chest card
+    on_cc = moved & np.isin(pos, community_chest)
+    card = rng.integers(0, 16, on_cc.sum())
+ 
+    new = pos[on_cc].copy()
+    new[card == 0] = 0                                  ### advance to Go
+    new[card == 1] = 40                                 ### go to jail
+    pos[on_cc] = new
+ 
+    return pos
+
 ### Equivalent of modelling a 1000 25-turn, 1000 50-turn, 1000 100-turn, 1000 200-turn, 1000 1000-turn games
 
 for i in range(1, 1001):
@@ -49,7 +93,9 @@ for i in range(1, 1001):
     in_jail[released] = False ### reset their jail state ***IMPORTANT
     in_jail[rolled_a_double] = False
 
-    send_to_jail = (~in_jail) & (pos == 30) ### landed on go to jail square
+    pos = apply_cards(pos, pos<40)
+
+    send_to_jail = (~in_jail) & ((pos == 30) | (pos == 40)) ### landed on go to jail square
     in_jail[send_to_jail] = True
 
 
@@ -61,7 +107,9 @@ for i in range(1, 1001):
 
     pos = np.where(eligible, (pos+roll3+roll4)%40, pos)
 
-    send_to_jail = (~in_jail) & (pos == 30) ### send players to jail if they are on the go to jail tile
+    pos = apply_cards(pos, eligible)
+
+    send_to_jail = (~in_jail) & ((pos == 30) | (pos == 40)) ### send players to jail if they are on the go to jail tile
     in_jail[send_to_jail] = True ### change their jail state
     not_eligible[send_to_jail] = True ### add the players that just got sent to jail to the list of players
 
@@ -69,7 +117,9 @@ for i in range(1, 1001):
 
     pos = np.where(eligible, (pos+roll5+roll6)%40, pos)
 
-    send_to_jail = (~in_jail) & (pos == 30)
+    pos = apply_cards(pos, eligible)
+
+    send_to_jail = (~in_jail) & ((pos == 30) | (pos == 40))
     in_jail[send_to_jail] = True
     not_eligible[send_to_jail] = True
 
