@@ -20,21 +20,69 @@ results = {}
 for i in range(1, 1001):
 
     ### deciding the roll for each turn
-    inc = rng.integers(1,7,num_of_games) + rng.integers(1, 7, num_of_games)
+    roll1 = np.array(rng.integers(1,7,num_of_games))
+    roll2 = np.array(rng.integers(1, 7, num_of_games))
 
-    ### check who's in jail and who needs to be released
-    in_jail = (jail > 0)
+    roll3 = np.array(rng.integers(1,7,num_of_games))
+    roll4 = np.array(rng.integers(1, 7, num_of_games))
+
+    roll5 = np.array(rng.integers(1,7,num_of_games))
+    roll6 = np.array(rng.integers(1, 7, num_of_games))
+
+### Normal player movement
+
+    in_jail = (jail > 0) ### check who's still in jail
+    pos = np.where(in_jail, pos, (pos+roll1+roll2)%40) ### free players move
+
+    
+### Jail states 
+
+    ### deal with the players to be released
+    rolled_a_double = (roll1 == roll2) & (in_jail)
     released = (in_jail) & (jail == 3)
 
-    pos = np.where(in_jail, pos, (pos+inc)%40) ### free players move
-    pos = np.where(released, 10, pos) ### get out of jail players released
+    pos = np.where(rolled_a_double | released, 10+roll1+roll2, pos) ### add their roll to their current pos (10: jail tile)
+
+    jail[rolled_a_double] = 0 ### reset their jail count
+    jail[released] = 0
+
+    in_jail[released] = False ### reset their jail state ***IMPORTANT
+    in_jail[rolled_a_double] = False
+
+    send_to_jail = (~in_jail) & (pos == 30) ### landed on go to jail square
+    in_jail[send_to_jail] = True
+
+
+### Double and third rolls
+
+    not_eligible = released | rolled_a_double | in_jail ### players just released from jail or in jail currently
+
+    eligible = (~not_eligible) & (roll1 == roll2)
+
+    pos = np.where(eligible, (pos+roll3+roll4)%40, pos)
+
+    send_to_jail = (~in_jail) & (pos == 30) ### send players to jail if they are on the go to jail tile
+    in_jail[send_to_jail] = True ### change their jail state
+    not_eligible[send_to_jail] = True ### add the players that just got sent to jail to the list of players
+
+    eligible = (~not_eligible) & (roll3 == roll4) & (roll1 == roll2)
+
+    pos = np.where(eligible, (pos+roll5+roll6)%40, pos)
 
     send_to_jail = (~in_jail) & (pos == 30)
     in_jail[send_to_jail] = True
+    not_eligible[send_to_jail] = True
+
+    consec_double = (~not_eligible) & (roll5 == roll6) & (roll3 == roll4) & (roll1 == roll2)
+
+    pos = np.where(consec_double, 40, pos)
+    in_jail[consec_double] = True
 
     jail = np.where(in_jail, np.where(jail == 3, 0, jail + 1), 0)
-
     pos = np.where(jail > 0, 39+jail, pos)
+
+
+### Update states
 
     counts[np.arange(num_of_games), pos] += 1
 

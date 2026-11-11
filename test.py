@@ -1,42 +1,43 @@
-import pandas as pd
+from monopoly import A, cols, pi
+
 import numpy as np
 
-from landing_matrix import v
-from monopoly import square_names
 
-_RAW = {
-    1:  ("Brown",      60,  50, (2, 10, 30, 90, 160, 250)),
-    3:  ("Brown",      60,  50, (4, 20, 60, 180, 320, 450)),
-    6:  ("Light blue", 100, 50, (6, 30, 90, 270, 400, 550)),
-    8:  ("Light blue", 100, 50, (6, 30, 90, 270, 400, 550)),
-    9:  ("Light blue", 120, 50, (8, 40, 100, 300, 450, 600)),
-    11: ("Pink",       140, 100, (10, 50, 150, 450, 625, 750)),
-    13: ("Pink",       140, 100, (10, 50, 150, 450, 625, 750)),
-    14: ("Pink",       160, 100, (12, 60, 180, 500, 700, 900)),
-    16: ("Orange",     180, 100, (14, 70, 200, 550, 750, 950)),
-    18: ("Orange",     180, 100, (14, 70, 200, 550, 750, 950)),
-    19: ("Orange",     200, 100, (16, 80, 220, 600, 800, 1000)),
-    21: ("Red",        220, 150, (18, 90, 250, 700, 875, 1050)),
-    23: ("Red",        220, 150, (18, 90, 250, 700, 875, 1050)),
-    24: ("Red",        240, 150, (20, 100, 300, 750, 925, 1100)),
-    26: ("Yellow",     260, 150, (22, 110, 330, 800, 975, 1150)),
-    27: ("Yellow",     260, 150, (22, 110, 330, 800, 975, 1150)),
-    29: ("Yellow",     280, 150, (24, 120, 360, 850, 1025, 1200)),
-    31: ("Green",      300, 200, (26, 130, 390, 900, 1100, 1275)),
-    32: ("Green",      300, 200, (26, 130, 390, 900, 1100, 1275)),
-    34: ("Green",      320, 200, (28, 150, 450, 1000, 1200, 1400)),
-    37: ("Dark blue",  350, 200, (35, 175, 500, 1100, 1300, 1500)),
-    39: ("Dark blue",  400, 200, (50, 200, 600, 1400, 1700, 2000)),
-}
+# rng = np.random.default_rng()
+# num_of_games = 6
 
-df = pd.DataFrame.from_dict(_RAW, orient="index", columns =["Colour", "Property Cost",
-                                                  "House Cost", "Rent"])
+# # jail = np.zeros(cols)
 
-df["Probs"] = v[df.index]
+# pos = np.zeros(num_of_games, dtype = int)
+# jail = np.array([1,2,0,2,0,0,0])
+# counts = np.zeros((num_of_games, cols),dtype=int)
 
-out = df.copy()
+# checkpoints = [25, 50, 100, 200, 1000]
+# results = {}
 
-probs = out.groupby("Colour")["Probs"].idxmax()
+# ### Equivalent of modelling a 1000 25-turn, 1000 50-turn, 1000 100-turn, 1000 200-turn, 1000 1000-turn games
 
-for idx in probs:
-    print(f"{square_names[idx]:<28}")
+# for i in range(1, 2):
+
+#     ### deciding the roll for each turn
+#     roll1 = np.array([1,2,3,4,5,6,7])
+#     roll2 = np.array([7,6,5,4,3,2,1])
+
+#     ### check who's in jail and who needs to be released
+#     rolled_a_double = (roll1 == roll2)
+#     print(rolled_a_double)
+#     in_jail = (jail > 0)
+#     in_jail[rolled_a_double] = False
+#     jail[rolled_a_double] = 0
+#     released = (in_jail) & (jail == 3)
+
+#     print(jail)
+
+
+
+arr1 = np.array([True, False, True])
+arr2 = ~arr1
+
+arr3 = arr1 | arr2
+
+print(arr1, arr2, arr3)
