@@ -63,7 +63,7 @@ def develop_all(df, budget, **kw):
 if __name__ == "__main__":
     import sys
     sys.path.insert(0, "/home/claude")
-    from monopoly import A
+    from markov_matrix import A
     from landing_matrix import L, v
     from payback import _RAW
 

@@ -1,9 +1,9 @@
-from monopoly import A, cols, pi
+from markov_matrix import A, cols, pi
 
 import numpy as np
 
 
-rng = np.random.default_rng()
+rng = np.random.default_rng(12345)
 num_of_games = 50000
 
 # jail = np.zeros(cols)
@@ -17,7 +17,6 @@ B = 10
 checkpoints = [25, 50, 100, 200, 1000]
 results = {}
 results_no_bias = {}
-counts_at = {}
 
 chance = [7, 22, 36]
 community_chest = [2, 17, 33]
@@ -73,7 +72,7 @@ def markov_freq(N):
 
 def rmse_and_max(err):
     err = err * 100                                    # percentage points
-    return float(np.sqrt(np.mean(err**2)))
+    return float(np.sqrt(np.mean(err**2))), float(np.max(np.abs(err)))
 
 def z_scores(counts_i, N, expected):
     per_game = counts_i / N                                      # each game's frequency over N turns
@@ -163,7 +162,6 @@ for i in range(1, 1001):
     counts[np.arange(num_of_games), pos] += 1
 
     if i in checkpoints:
-        counts_at[i] = counts.copy()
         results[i] = counts.mean(axis = 0)/i
         if i > B:
             results_no_bias[i] = (counts - biased_counts).mean(axis=0)/(i-B)
@@ -171,13 +169,9 @@ for i in range(1, 1001):
 
 for i in checkpoints:
     matrix_valid = markov_freq(i) - results[i]         # matrix validation incl bias
-    if i > B:
-        no_bias = pi - results_no_bias[i]
-        print(i, rmse_and_max(matrix_valid))
-    else:
-        print(i, rmse_and_max(matrix_valid))
-
-
-for i in checkpoints:
-    z = z_scores(counts_at[i], i, markov_freq(i))
-    print(i, np.max(np.abs(z)), np.sum(np.abs(z)>2))
+    # if i > B:
+    #     no_bias = pi - results_no_bias[i]
+    #     print(i, rmse_and_max(matrix_valid), rmse_and_max(no_bias))
+    # else:
+    #     print(i, rmse_and_max(matrix_valid))
+    print(i, rmse_and_max(results[i] - pi))

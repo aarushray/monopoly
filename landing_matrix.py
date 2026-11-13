@@ -6,7 +6,7 @@
 ### to saying that pi is the probability of ending a turn on a certain square in the
 ### long run. The latter definition is useful below in the next explanation.
 
-from monopoly import A, M, D, F, J, pi, square_names
+from markov_matrix import A, M, D, F, J, pi, square_names
 
 import numpy as np
 import pandas as pd

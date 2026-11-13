@@ -1,4 +1,4 @@
-from monopoly import A, cols
+from markov_matrix import A, cols
 from landing_matrix import L, v
 
 import numpy as np

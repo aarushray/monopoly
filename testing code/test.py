@@ -1,4 +1,4 @@
-from monopoly import A, cols, pi
+from markov_matrix import A, cols, pi
 
 import numpy as np
 
