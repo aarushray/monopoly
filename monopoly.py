@@ -189,3 +189,5 @@ with open(file = "tile names.txt", mode = "r") as f:
 # print(np.allclose(A_sub.sum(axis=0), 1))     # columns still sum to 1
 # P = np.linalg.matrix_power(A_sub, 200)
 # print((P > 0).all())          
+# C=A@A
+# print(C[:,0][9])
