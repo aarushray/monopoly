@@ -3,20 +3,11 @@ from markov_matrix import A, cols, pi
 import numpy as np
 
 
-rng = np.random.default_rng(12345)
-num_of_games = 50000
+rng = np.random.default_rng(2026)   # fixed seed: same numbers every run
 
-# jail = np.zeros(cols)
-
-pos = np.zeros(num_of_games, dtype = int)
-jail = np.zeros(num_of_games, dtype = int)
-counts = np.zeros((num_of_games, cols),dtype=int)
-biased_counts = np.zeros((num_of_games, cols), dtype=int)
 B = 10
 
 checkpoints = [25, 50, 100, 200, 1000]
-results = {}
-results_no_bias = {}
 
 chance = [7, 22, 36]
 community_chest = [2, 17, 33]
@@ -70,108 +61,100 @@ def markov_freq(N):
         total += x
     return total / N
 
-def rmse_and_max(err):
-    err = err * 100                                    # percentage points
-    return float(np.sqrt(np.mean(err**2))), float(np.max(np.abs(err)))
 
-def z_scores(counts_i, N, expected):
-    per_game = counts_i / N                                      # each game's frequency over N turns
-    se = per_game.std(axis = 0, ddof = 1) / np.sqrt(num_of_games)   # one standard error per state
-    ok = se > 0                                                  # skips state 30, never visited
+def simulate(num_of_games, num_turns):
+    """Plays num_of_games fresh, independent games of num_turns turns.
+    Returns end-of-turn visit counts (games x states) over all turns, and over turns B+1..N."""
+    pos = np.zeros(num_of_games, dtype = int)
+    jail = np.zeros(num_of_games, dtype = int)
+    counts = np.zeros((num_of_games, cols), dtype = int)
+    biased_counts = np.zeros((num_of_games, cols), dtype = int)
+
+    for i in range(1, num_turns + 1):
+        ### deciding the roll for each turn
+        roll1 = np.array(rng.integers(1,7,num_of_games))
+        roll2 = np.array(rng.integers(1, 7, num_of_games))
+
+        roll3 = np.array(rng.integers(1,7,num_of_games))
+        roll4 = np.array(rng.integers(1, 7, num_of_games))
+
+        roll5 = np.array(rng.integers(1,7,num_of_games))
+        roll6 = np.array(rng.integers(1, 7, num_of_games))
+
+    ### Normal player movement
+
+        in_jail = (jail > 0) ### check who's still in jail
+        pos = np.where(in_jail, pos, (pos+roll1+roll2)%40) ### free players move
+
+    
+    ### Jail states 
+
+        ### deal with the players to be released
+        rolled_a_double = (roll1 == roll2) & (in_jail)
+        released = (in_jail) & (jail == 3)
+
+        pos = np.where(rolled_a_double | released, 10+roll1+roll2, pos) ### add their roll to their current pos (10: jail tile)
+
+        jail[rolled_a_double] = 0 ### reset their jail count
+        jail[released] = 0
+
+        in_jail[released] = False ### reset their jail state ***IMPORTANT
+        in_jail[rolled_a_double] = False
+
+        pos = apply_cards(pos, pos<40)
+
+        send_to_jail = (~in_jail) & ((pos == 30) | (pos == 40)) ### landed on go to jail square
+        in_jail[send_to_jail] = True
+
+
+    ### Double and third rolls
+
+        not_eligible = released | rolled_a_double | in_jail ### players just released from jail or in jail currently
+
+        eligible = (~not_eligible) & (roll1 == roll2)
+
+        pos = np.where(eligible, (pos+roll3+roll4)%40, pos)
+
+        pos = apply_cards(pos, eligible)
+
+        send_to_jail = (~in_jail) & ((pos == 30) | (pos == 40)) ### send players to jail if they are on the go to jail tile
+        in_jail[send_to_jail] = True ### change their jail state
+        not_eligible[send_to_jail] = True ### add the players that just got sent to jail to the list of players
+
+        eligible = (~not_eligible) & (roll3 == roll4) & (roll1 == roll2)
+
+        pos = np.where(eligible, (pos+roll5+roll6)%40, pos)
+
+        pos = apply_cards(pos, eligible)
+
+        send_to_jail = (~in_jail) & ((pos == 30) | (pos == 40))
+        in_jail[send_to_jail] = True
+        not_eligible[send_to_jail] = True
+
+        consec_double = (~not_eligible) & (roll5 == roll6) & (roll3 == roll4) & (roll1 == roll2)
+
+        pos = np.where(consec_double, 40, pos)
+        in_jail[consec_double] = True
+
+        jail = np.where(in_jail, np.where(jail == 3, 0, jail + 1), 0)
+        pos = np.where(jail > 0, 39+jail, pos)
+
+
+
+        if i == B + 1:
+            biased_counts = counts.copy()
+        counts[np.arange(num_of_games), pos] += 1
+
+    return counts, counts - biased_counts
+
+
+def z_scores(counts, N, expected):
+    per_game = counts / N
+    se = per_game.std(axis = 0, ddof = 1) / np.sqrt(counts.shape[0])
+    ok = se > 0                                      # skips state 30, never visited
     return (per_game.mean(axis = 0)[ok] - expected[ok]) / se[ok]
 
 
-### Equivalent of modelling a 1000 25-turn, 1000 50-turn, 1000 100-turn, 1000 200-turn, 1000 1000-turn games
+def rmse(err):
+    return float(np.sqrt(np.mean((err * 100) ** 2)))   # percentage points
 
-for i in range(1, 1001):
-
-    ### deciding the roll for each turn
-    roll1 = np.array(rng.integers(1,7,num_of_games))
-    roll2 = np.array(rng.integers(1, 7, num_of_games))
-
-    roll3 = np.array(rng.integers(1,7,num_of_games))
-    roll4 = np.array(rng.integers(1, 7, num_of_games))
-
-    roll5 = np.array(rng.integers(1,7,num_of_games))
-    roll6 = np.array(rng.integers(1, 7, num_of_games))
-
-### Normal player movement
-
-    in_jail = (jail > 0) ### check who's still in jail
-    pos = np.where(in_jail, pos, (pos+roll1+roll2)%40) ### free players move
-
-    
-### Jail states 
-
-    ### deal with the players to be released
-    rolled_a_double = (roll1 == roll2) & (in_jail)
-    released = (in_jail) & (jail == 3)
-
-    pos = np.where(rolled_a_double | released, 10+roll1+roll2, pos) ### add their roll to their current pos (10: jail tile)
-
-    jail[rolled_a_double] = 0 ### reset their jail count
-    jail[released] = 0
-
-    in_jail[released] = False ### reset their jail state ***IMPORTANT
-    in_jail[rolled_a_double] = False
-
-    pos = apply_cards(pos, pos<40)
-
-    send_to_jail = (~in_jail) & ((pos == 30) | (pos == 40)) ### landed on go to jail square
-    in_jail[send_to_jail] = True
-
-
-### Double and third rolls
-
-    not_eligible = released | rolled_a_double | in_jail ### players just released from jail or in jail currently
-
-    eligible = (~not_eligible) & (roll1 == roll2)
-
-    pos = np.where(eligible, (pos+roll3+roll4)%40, pos)
-
-    pos = apply_cards(pos, eligible)
-
-    send_to_jail = (~in_jail) & ((pos == 30) | (pos == 40)) ### send players to jail if they are on the go to jail tile
-    in_jail[send_to_jail] = True ### change their jail state
-    not_eligible[send_to_jail] = True ### add the players that just got sent to jail to the list of players
-
-    eligible = (~not_eligible) & (roll3 == roll4) & (roll1 == roll2)
-
-    pos = np.where(eligible, (pos+roll5+roll6)%40, pos)
-
-    pos = apply_cards(pos, eligible)
-
-    send_to_jail = (~in_jail) & ((pos == 30) | (pos == 40))
-    in_jail[send_to_jail] = True
-    not_eligible[send_to_jail] = True
-
-    consec_double = (~not_eligible) & (roll5 == roll6) & (roll3 == roll4) & (roll1 == roll2)
-
-    pos = np.where(consec_double, 40, pos)
-    in_jail[consec_double] = True
-
-    jail = np.where(in_jail, np.where(jail == 3, 0, jail + 1), 0)
-    pos = np.where(jail > 0, 39+jail, pos)
-
-
-### Update states
-
-    if i == B+1:
-        biased_counts = counts.copy()
-
-    counts[np.arange(num_of_games), pos] += 1
-
-    if i in checkpoints:
-        results[i] = counts.mean(axis = 0)/i
-        if i > B:
-            results_no_bias[i] = (counts - biased_counts).mean(axis=0)/(i-B)
-
-
-for i in checkpoints:
-    matrix_valid = markov_freq(i) - results[i]         # matrix validation incl bias
-    # if i > B:
-    #     no_bias = pi - results_no_bias[i]
-    #     print(i, rmse_and_max(matrix_valid), rmse_and_max(no_bias))
-    # else:
-    #     print(i, rmse_and_max(matrix_valid))
-    print(i, rmse_and_max(results[i] - pi))
